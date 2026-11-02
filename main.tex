@@ -56,7 +56,7 @@
 %%  ABSTRACT
 %% ---------------------------------------------------------------
 \begin{abstract}
-Terrain-referenced navigation (TRN) allows autonomous underwater vehicles (AUVs) to bound dead-reckoning drift by matching altimeter measurements to a bathymetric map, but its reliability depends strongly on the path taken. When the initial uncertainty is large, repetitive or elongated seafloor features such as sand waves and slope bands produce several equally plausible position hypotheses, and the filter may converge to a wrong one. Planners based on the terrain gradient, i.e., the Fisher information, are overconfident on such terrain because the Fisher information is valid only for small uncertainty. This paper presents an ambiguity-aware active localization framework that integrates an autocorrelation-based terrain information model into model predictive path integral (MPPI) control. The model evaluates the local terrain autocorrelation under the current belief size, retains only the information that remains unambiguous, and reduces to the Fisher information in the small-uncertainty limit. Precomputed at multiple belief scales, it is embedded in a belief-dependent covariance prediction along rollouts of an AUV maneuvering model. Monte Carlo simulations with a six-degree-of-freedom REMUS~100 model on eight real bathymetric maps show that the proposed method achieves a mission success rate of 97.5\%, compared with 68.8--92.1\% for straight-line, A*-based, and Fisher-based MPPI baselines and \tbd{XX}\% for a particle-entropy-based MPPI.
+Terrain-referenced navigation (TRN) allows autonomous underwater vehicles (AUVs) to bound dead-reckoning drift by matching altimeter measurements to a bathymetric map, but its reliability depends strongly on the path taken. When the initial uncertainty is large, repetitive or elongated seafloor features such as sand waves and stripes produce several equally plausible position hypotheses, and the filter may converge to a wrong one. Common terrain information measures, namely the Fisher information of the terrain gradient, the elevation standard deviation, and the terrain entropy, are local or magnitude-based and therefore overconfident on such terrain. This paper presents an ambiguity-aware active localization framework that integrates an autocorrelation-based terrain information model into model predictive path integral (MPPI) control. The model evaluates the local terrain autocorrelation under the current belief size, retains only the information that remains unambiguous, and reduces to the Fisher information in the small-uncertainty limit. Precomputed at multiple belief scales, it is embedded in a belief-dependent covariance prediction along rollouts of an AUV maneuvering model. In 8,100 Monte Carlo runs with a six-degree-of-freedom REMUS~100 model on ten real bathymetric maps and three initial uncertainties, the proposed planner achieved a success rate of 86.3\% and the highest rate at every uncertainty level, compared with 75.1--83.6\% for A* and MPPI planners using the Fisher, standard-deviation, or entropy maps and 55.2\% for straight-line guidance.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -70,18 +70,18 @@ Marine robotics, localization, motion and path planning, planning under uncertai
 \label{sec:intro}
 \IEEEPARstart{A}{utonomous} underwater vehicles (AUVs) operate without access to the global navigation satellite system (GNSS), and their dead-reckoning (DR) solution obtained from inertial sensors and a Doppler velocity log (DVL) drifts without bound~\cite{paull2014auv}. Terrain-referenced navigation (TRN) bounds this drift by matching onboard seafloor measurements to a prior bathymetric map~\cite{bergman1999terrain, carreno2010survey, melo2017survey}, even with a single-beam altimeter that most AUVs already carry~\cite{kim2014nonlinear, claus2015terrain, salavasidis2019terrain}, and thereby removes the need to surface for GNSS fixes or to deploy acoustic beacons (Fig.~\ref{fig:auv}).
 
-However, the performance of TRN depends on the terrain the vehicle traverses, and reliable TRN remains challenging due to several coupled factors. First, the initial position uncertainty after a long DR transit can reach tens of meters, which is comparable to the characteristic length of many seafloor features. Second, a single-beam altimeter provides one scalar measurement per ping, so the observable position components depend on the direction in which the terrain is crossed. Third, natural seafloors frequently contain repetitive or elongated features such as sand waves, linear stripes, and slope bands (Fig.~\ref{fig:terrains}), on which several position hypotheses explain the measurements equally well. The particle filter (PF) can then converge to a wrong hypothesis while reporting a small covariance, resulting in a large undetected error at the destination. Therefore, the vehicle must actively select a path that provides information that is not only abundant but also unambiguous at its current level of uncertainty.
+However, the performance of TRN depends on the terrain the vehicle traverses, and reliable TRN remains challenging due to several coupled factors. First, the initial position uncertainty after a long DR transit can reach tens of meters, which is comparable to the characteristic length of many seafloor features. Second, a single-beam altimeter provides one scalar measurement per ping, so the observable position components depend on the direction in which the terrain is crossed. Third, natural seafloors frequently contain repetitive or elongated features such as sand waves, linear stripes, and ridges (Fig.~\ref{fig:terrains}), on which several position hypotheses explain the measurements equally well. The particle filter (PF) can then converge to a wrong hypothesis while reporting a small covariance, resulting in a large undetected error at the destination. Therefore, the vehicle must actively select a path that provides information that is not only abundant but also unambiguous at its current level of uncertainty.
 
-Information-aware planners typically quantify the information by the terrain gradient, i.e., the Fisher information, and predict the localization error through the Cram\'{e}r--Rao bound~\cite{tichavsky1998posterior, prentice2009belief, hausler2013cooperative}. This prediction is accurate once the belief is narrower than the terrain features, but it is overconfident when the uncertainty is large, because steep but repetitive terrain yields large Fisher information even though its features cannot be told apart. Particle-based information measures avoid this approximation~\cite{hoffmann2010mobile, ryan2010particle}, but their cost grows with the number of particles and simulated measurements, which is prohibitive when hundreds of candidate trajectories must be evaluated at every replanning step.
+Information-aware planners quantify the information of the terrain with measures such as the Fisher information of the terrain gradient, the elevation standard deviation, or the terrain entropy~\cite{tichavsky1998posterior, wang2015construction, prentice2009belief, hausler2013cooperative}. These measures are local or magnitude-based: they are accurate once the belief is narrower than the terrain features, but they are overconfident when the uncertainty is large, because steep, rough, or repetitive terrain yields large values even though its features cannot be told apart (Fig.~\ref{fig:maps}). Particle-based information measures avoid this approximation~\cite{hoffmann2010mobile, ryan2010particle}, but their cost grows with the number of particles and simulated measurements, which is prohibitive when hundreds of candidate trajectories must be evaluated at every replanning step.
 
 Motivated by these observations, this paper proposes an ambiguity-aware active localization framework that integrates an autocorrelation-based terrain information model into model predictive path integral (MPPI) control~\cite{williams2017model, williams2018information}. The model combines the local terrain autocorrelation with the current belief size and retains only the information that remains unambiguous. Because it depends only on the map and the belief size, it is precomputed at several belief scales and looked up at the cost of a Fisher information map. The MPPI planner embeds the model in a belief-dependent covariance prediction along rollouts of an AUV maneuvering model, so that information from repetitive features is counted only to the extent that the current belief can resolve them.
 
 \begin{figure}
   \centering
-  % Generated by scripts/ral_figures.py fig1 (S5, AC-MPPI, MC run #13, same run as Fig. 4).
+  % Generated by scripts/ral_figures.py fig1 (S3, AC-MPPI, representative run at sigma0 = 50 m, same run as Fig. 5).
   \includegraphics[width=\linewidth]{figs/fig1_auv_trn.pdf}
   \vspace{-14pt}
-  \caption{Active terrain-referenced localization of an AUV over a sand-wave field (S5; vertical scale exaggerated, AUV not to scale). The AUV follows the seafloor at a constant altitude and localizes itself by matching single-beam altimeter measurements to a prior bathymetric map with a particle filter. Starting from a $50$~m initial uncertainty, the proposed planner leaves the direct route (dashed) so that the belief ($2\sigma$ ellipses at $0$, $250$, and $450$~s) contracts before the vehicle reaches the goal. Solid and dotted: travelled and remaining parts of the true track.}
+  \caption{Active terrain-referenced localization of an AUV over a sand-wave field (S3; vertical scale exaggerated, AUV not to scale). The AUV follows the seafloor at a constant altitude and localizes itself by matching single-beam altimeter measurements to a prior bathymetric map with a particle filter. Starting from a $50$~m initial uncertainty, the proposed planner leaves the direct route (dashed) so that the belief ($2\sigma$ ellipses at $0$, $300$, and $600$~s) contracts before the vehicle reaches the goal. Solid and dotted: travelled and remaining parts of the true track.}
   \label{fig:auv}
   \vspace{-12pt}
 \end{figure}
@@ -90,7 +90,7 @@ The main contributions of this paper are summarized as follows:
 \begin{itemize}
     \item An autocorrelation-based terrain information model is proposed, which quantifies the information that remains unambiguous at the current belief size and reduces to the Fisher information in the small-uncertainty limit.
     \item An MPPI-based active localization framework is developed that embeds the information model into a belief-dependent covariance prediction along rollouts of an AUV maneuvering model, using multi-scale precomputed information maps for real-time planning.
-    \item The framework is validated through Monte Carlo simulations with a six-degree-of-freedom (6-DOF) REMUS~100 model on eight real bathymetric maps against straight-line, A*-based, Fisher-based, and particle-entropy-based baselines.
+    \item The framework is validated through 8,100 Monte Carlo runs with a six-degree-of-freedom (6-DOF) REMUS~100 model on ten real bathymetric maps and three initial uncertainties, against straight-line guidance and A* and MPPI planners that use the Fisher, standard-deviation, and entropy maps.
 \end{itemize}
 
 \begin{figure*}
@@ -98,7 +98,7 @@ The main contributions of this paper are summarized as follows:
   % Generated by scripts/ral_figures.py fig2.
   \includegraphics[width=\linewidth]{figs/fig2_terrains.pdf}
   \vspace{-14pt}
-  \caption{Eight test terrains (NOAA BlueTopo, $2$~km~$\times$~$2$~km) with the direct route (dashed), nominal start (green), goal (star), and $30$ true start positions (white dots). Insets: offset posterior $\pi_\sigma(\bd \mid \bx)$ at the nominal start ($\sigma = 50$~m, $\pm 150$~m; dashed circle: prior $2\sigma$; cross: true offset). The posterior contracts only across the features on the stripes, slope band, and sand waves of S1, S2, and S5 and remains close to the prior elsewhere, so the initial uncertainty cannot be resolved around the start alone.}
+  \caption{Ten test terrains (NOAA BlueTopo, $2$~km~$\times$~$2$~km) with the direct route (dashed), nominal start (green), goal (star), and the $30$ true start positions at $\sigma_0 = 50$~m (white dots). S1--S6 were selected because the Fisher map is overconfident along the route and S7--S10 because the standard-deviation and entropy maps are (Section~\ref{sec:setup}).}
   \label{fig:terrains}
   \vspace{-12pt}
 \end{figure*}
@@ -108,7 +108,7 @@ The main contributions of this paper are summarized as follows:
 %% ---------------------------------------------------------------
 \section{Related Work}
 \label{sec:related}
-TRN estimates the vehicle position by comparing measured depths or altitudes with a bathymetric map~\cite{bergman1999terrain, nygren2004terrain, melo2017survey}, typically with PFs because the posterior is frequently multimodal~\cite{arulampalam2002tutorial, donovan2012position, teixeira2017robust, kim2018comparison}, and it has been demonstrated with multibeam sonars as well as low-cost altimeters on long-range AUVs and gliders~\cite{meduna2008low, claus2015terrain, salavasidis2019terrain}. These studies treat the path as given and report that the accuracy depends on the terrain traversed~\cite{nygren2004terrain, melo2017survey}. The posterior Cram\'{e}r--Rao lower bound (PCRLB), i.e., the inverse of the accumulated Fisher information of the terrain gradient, is widely used to predict this accuracy~\cite{tichavsky1998posterior, bergman1999terrain}, but it characterizes only the asymptotic error around the true position. Large errors caused by competing hypotheses belong to the threshold region, where global bounds such as the Ziv--Zakai bound are governed by the ambiguity of the measurement under a parameter offset rather than by its local curvature~\cite{ziv1969some}. In TRN, this ambiguity is determined by the terrain autocorrelation, which also underlies correlation-based terrain matching~\cite{nygren2004terrain}.
+TRN estimates the vehicle position by comparing measured depths or altitudes with a bathymetric map~\cite{bergman1999terrain, nygren2004terrain, melo2017survey}, typically with PFs because the posterior is frequently multimodal~\cite{arulampalam2002tutorial, donovan2012position, teixeira2017robust, kim2018comparison}, and it has been demonstrated with multibeam sonars as well as low-cost altimeters on long-range AUVs and gliders~\cite{meduna2008low, claus2015terrain, salavasidis2019terrain}. These studies treat the path as given and report that the accuracy depends on the terrain traversed~\cite{nygren2004terrain, melo2017survey}. The suitability of terrain for TRN is commonly assessed by the elevation standard deviation, the terrain entropy, and the Fisher information~\cite{wang2015construction}, and the posterior Cram\'{e}r--Rao lower bound (PCRLB), i.e., the inverse of the accumulated Fisher information of the terrain gradient, is widely used to predict the accuracy~\cite{tichavsky1998posterior, bergman1999terrain}. These measures characterize the error around the true position, but not the large errors caused by competing hypotheses. Such errors belong to the threshold region, where global bounds such as the Ziv--Zakai bound are governed by the ambiguity of the measurement under a parameter offset rather than by its local curvature~\cite{ziv1969some}. In TRN, this ambiguity is determined by the terrain autocorrelation, which also underlies correlation-based terrain matching~\cite{nygren2004terrain}.
 
 Active localization selects actions that reduce the localization uncertainty~\cite{fox1998active}. Belief-space planners propagate a Gaussian belief with the Fisher information or an extended Kalman filter~\cite{prentice2009belief, vandenberg2011lqg, bry2011rapidly, indelman2015planning}, and perception-aware methods embed Fisher-based localization costs into planning or receding-horizon control~\cite{zhang2019beyond, falanga2018pampc}. For TRN, planners steer the vehicle over terrain with high information content~\cite{hausler2013cooperative}, optimize waypoints for the Monte Carlo probability of reaching the goal~\cite{krukowski2016waypoint}, or select actions that discriminate between PF hypotheses~\cite{fairfield2008active}. Fisher-based predictions inherit the local nature of the Fisher information, whereas particle-based and Monte Carlo evaluations~\cite{hoffmann2010mobile, ryan2010particle, krukowski2016waypoint} are costly inside a sampling-based planner. MPPI control~\cite{williams2016aggressive, williams2017model, williams2018information} optimizes nonsmooth costs over sampled rollouts of nonlinear dynamics and suits active localization if the information cost of each rollout can be evaluated in real time. The proposed framework brings these aspects together: an ambiguity-aware information model that is as inexpensive to evaluate as a Fisher information map, embedded in an MPPI planner with AUV dynamics.
 
@@ -145,7 +145,7 @@ where $\bo_k$ is the footprint offset determined from the attitude and the measu
 where $\sigma_L > \sigma_z$ is inflated against weight degeneracy and $\beta_k \in (0,1]$ is the largest tempering exponent that keeps the effective sample size (ESS) above $0.3N_p$. Systematic resampling with roughening is applied when the ESS falls below $0.5N_p$. The PF provides the estimate $\hat{\bx}_k$ and the covariance $P_k$ of the particles.
 
 \subsection{Active Localization Problem}
-The vehicle starts at $\bp_0 = \bar{\bp}_0 + \mathbf{e}_0$, $\mathbf{e}_0 \sim \mathcal{N}(\mathbf{0}, \sigma_0^2 I)$, around the nominal start $\bar{\bp}_0$ at which the PF is initialized, and must reach the goal $\bg$. The mission terminates when $\|\bg - \hat{\bx}_k\| \le r_a$. It is successful if $\|\bp_k - \hat{\bx}_k\| \le r_a$ at that moment, i.e., the vehicle has actually reached the goal, a false arrival otherwise, and a timeout if no arrival occurs within $T_{\max}$. The planner seeks heading-rate commands that minimize
+The vehicle starts at $\bp_0 = \bar{\bp}_0 + \mathbf{e}_0$, $\mathbf{e}_0 \sim \mathcal{N}(\mathbf{0}, \sigma_0^2 I)$, around the nominal start $\bar{\bp}_0$ at which the PF is initialized with the same $\sigma_0$, and must reach the goal $\bg$. The mission terminates when $\|\bg - \hat{\bx}_k\| \le r_a$. It is successful if $\|\bp_k - \hat{\bx}_k\| \le r_a$ at that moment, i.e., the vehicle has actually reached the goal, a false arrival otherwise, and a timeout if no arrival occurs within $T_{\max}$. The planner seeks heading-rate commands that minimize
 \begin{equation}
   \mathbb{E}\big[\|\bp_{k_f} - \hat{\bx}_{k_f}\|^2\big] + \alpha\, T_f,
   \label{eq:objective}
@@ -158,7 +158,7 @@ where $k_f$ and $T_f$ are the arrival ping and time and $\alpha$ weights the tra
 \section{Autocorrelation-Based Terrain Information}
 \label{sec:info}
 
-\subsection{Limitation of the Fisher Information}
+\subsection{Limitation of Local Terrain Information Measures}
 For the measurement~\eqref{eq:measurement} with the likelihood standard deviation $\sigma_L$, the Fisher information on the position from a single ping at $\bp$ is
 \begin{equation}
   \JF(\bp) = \sigma_L^{-2}\,\nabla h(\bp)\,\nabla h(\bp)^\top,
@@ -169,7 +169,7 @@ and the covariance along a path $\bp_1, \ldots, \bp_T$ is predicted by
   P_t = \big( (P_{t-1} + \sigma_q^2 I)^{-1} + J(\bp_t) \big)^{-1}
   \label{eq:riccati}
 \end{equation}
-with $J = \JF$, which yields the PCRLB~\cite{tichavsky1998posterior, bergman1999terrain}. This prediction is valid only while the error remains in the region where $h$ is approximately linear. On repetitive terrain, positions offset by one period produce identical measurements; if the uncertainty exceeds the period, \eqref{eq:riccati} with $J = \JF$ predicts a contraction that no Bayesian filter can realize (Remark~\ref{rem:periodic}), and a planner relying on it is attracted to precisely the terrain that causes false convergence.
+with $J = \JF$, which yields the PCRLB~\cite{tichavsky1998posterior, bergman1999terrain}. This prediction is valid only while the error remains in the region where $h$ is approximately linear. On repetitive terrain, positions offset by one period produce identical measurements; if the uncertainty exceeds the period, \eqref{eq:riccati} with $J = \JF$ predicts a contraction that no Bayesian filter can realize (Remark~\ref{rem:periodic}), and a planner relying on it is attracted to precisely the terrain that causes false convergence. Magnitude-based measures such as the elevation standard deviation and the terrain entropy~\cite{wang2015construction} share this limitation and, in addition, ignore the direction in which the terrain is informative.
 
 \subsection{Local Autocorrelation and the Offset Posterior}
 Consider the expected squared measurement residual when the belief is offset from the truth by $\bd$ while the vehicle crosses a window $\mathcal{W}(\bx)$ of side $w$ centered at $\bx$:
@@ -179,10 +179,10 @@ Consider the expected squared measurement residual when the belief is offset fro
 \end{equation}
 For locally stationary terrain, $D(\bx,\bd) = 2\big(R_{\bx}(\mathbf{0}) - R_{\bx}(\bd)\big)$ with the local autocorrelation $R_{\bx}$. $D$ vanishes at $\bd = \mathbf{0}$, and a small value at $\bd \neq \mathbf{0}$ indicates an offset that the terrain cannot distinguish from the truth. If $M$ pings are collected within the window while the belief is an isotropic Gaussian of size $\sigma$, the posterior over the offset is
 \begin{equation}
-  \pi_\sigma(\bd \mid \bx) \propto \exp\!\Big( -\frac{\|\bd\|^2}{2\sigma^2} - \frac{M\,D(\bx,\bd)}{2\sigma_L^2} \Big).
+  \pi_\sigma(\bd \mid \bx) \propto \exp\!\Big( -\frac{\|\bd\|^2}{2\sigma^2} - \frac{M\,D(\bx,\bd)}{2\sigma_A^2} \Big),
   \label{eq:posterior}
 \end{equation}
-Its second moment about the true offset,
+where $\sigma_A$ is the residual scale of the model, a design parameter that need not equal $\sigma_L$. Its second moment about the true offset,
 \begin{equation}
   \Sigma_\sigma(\bx) = \textstyle\int \bd\,\bd^\top\, \pi_\sigma(\bd \mid \bx)\, d\bd,
   \label{eq:second_moment}
@@ -192,23 +192,33 @@ is the expected squared error after crossing the window, and the autocorrelation
   \JA(\bx; \sigma) = M^{-1}\big[\, \Sigma_\sigma(\bx)^{-1} - \sigma^{-2} I \,\big]_+,
   \label{eq:Jac}
 \end{equation}
-where $[A]_+ = V\max(\Lambda, 0)V^\top$ for $A = V\Lambda V^\top$. Because $\Sigma_\sigma$ is taken about the true offset rather than the posterior mean, probability mass on a competing offset increases $\Sigma_\sigma$ and reduces $\JA$ in the direction of the ambiguity. The insets of Fig.~\ref{fig:terrains} show $\pi_\sigma$ at the start of each test route.
+where $[A]_+ = V\max(\Lambda, 0)V^\top$ for $A = V\Lambda V^\top$. Because $\Sigma_\sigma$ is taken about the true offset rather than the posterior mean, probability mass on a competing offset increases $\Sigma_\sigma$ and reduces $\JA$ in the direction of the ambiguity. Fig.~\ref{fig:maps} compares the expected error $E_{\mathrm{AC}} = \sqrt{\tr\Sigma_{\sigma_0}}$ with the corresponding errors predicted by the Fisher, standard-deviation, and entropy measures: the latter rate stripes, slopes, and sand waves as informative, whereas the autocorrelation retains only the few locations that are unambiguous at $\sigma_0 = 50$~m.
+
+\begin{figure*}
+  \centering
+  % Generated by scripts/ral_figures.py fig3 (p61 map definitions; autocorrelation sigma_A = 0.3 m).
+  \includegraphics[width=\linewidth]{figs/fig3_maps.pdf}
+  \vspace{-14pt}
+  \caption{Expected error after one $50$~m pass ($\sigma_0 = 50$~m, $M = 33$ pings) predicted by the four terrain information maps on three test terrains; brighter is more informative, and the label gives the mean along the direct route. The standard-deviation and entropy maps (log-correlation $\ge 0.91$ on every test terrain) rate the stripes of S1 and the slope of S7 as highly informative, and the Fisher map rates the sand waves of S3 as informative, whereas the autocorrelation map retains only the locations that are unambiguous at this belief size.}
+  \label{fig:maps}
+  \vspace{-12pt}
+\end{figure*}
 
 \subsection{Properties}
 \begin{proposition}\label{prop:fisher}
-Let $h$ be four times continuously differentiable on a neighborhood of $\mathcal{W}(\bx)$, and let $G(\bx) = |\mathcal{W}|^{-1}\int_{\mathcal{W}(\bx)} \nabla h\,\nabla h^\top d\bq$. Then, for a fixed $M$, $\JA(\bx;\sigma) = \sigma_L^{-2}\,G(\bx) + O(\sigma^2)$ as $\sigma \to 0$, i.e., $\JA$ converges to the window-averaged Fisher information $\JFbar(\bx)$.
+Let $h$ be four times continuously differentiable on a neighborhood of $\mathcal{W}(\bx)$, and let $G(\bx) = |\mathcal{W}|^{-1}\int_{\mathcal{W}(\bx)} \nabla h\,\nabla h^\top d\bq$. Then, for a fixed $M$, $\JA(\bx;\sigma) = \sigma_A^{-2}\,G(\bx) + O(\sigma^2)$ as $\sigma \to 0$, i.e., $\JA$ converges to the window-averaged Fisher information with the residual scale $\sigma_A$.
 \end{proposition}
 
 \begin{proof}
-By Taylor expansion, $D(\bx,\bd) = \bd^\top G\bd + c_3(\bd) + O(\|\bd\|^4)$ with a homogeneous cubic form $c_3$. Without the higher-order terms, \eqref{eq:posterior} is a zero-mean Gaussian with precision $A = \sigma^{-2}I + (M/\sigma_L^2)G$, and \eqref{eq:Jac} gives exactly $G/\sigma_L^2$. Since $\pi_\sigma$ concentrates on $\|\bd\| = O(\sigma)$, the first-order perturbation of the second moment by the odd form $c_3$ vanishes, and the remaining perturbations are $\delta\Sigma = O(M\sigma^6) + O(M^2\sigma^8)$. With $\|A\| = O(\sigma^{-2})$, $\Sigma_\sigma^{-1} = A - A\,\delta\Sigma\,A + \ldots = A + O(M\sigma^2)$. Since $G \succeq 0$, the projection $[\cdot]_+$ changes the result by at most the same order, and dividing by $M$ yields the claim.
+By Taylor expansion, $D(\bx,\bd) = \bd^\top G\bd + c_3(\bd) + O(\|\bd\|^4)$ with a homogeneous cubic form $c_3$. Without the higher-order terms, \eqref{eq:posterior} is a zero-mean Gaussian with precision $A = \sigma^{-2}I + (M/\sigma_A^2)G$, and \eqref{eq:Jac} gives exactly $G/\sigma_A^2$. Since $\pi_\sigma$ concentrates on $\|\bd\| = O(\sigma)$, the first-order perturbation of the second moment by the odd form $c_3$ vanishes, and the remaining perturbations are $\delta\Sigma = O(M\sigma^6) + O(M^2\sigma^8)$. With $\|A\| = O(\sigma^{-2})$, $\Sigma_\sigma^{-1} = A - A\,\delta\Sigma\,A + \ldots = A + O(M\sigma^2)$. Since $G \succeq 0$, the projection $[\cdot]_+$ changes the result by at most the same order, and dividing by $M$ yields the claim.
 \end{proof}
 
 \begin{remark}\label{rem:periodic}
-For a sand-wave field $h(\bq) = a\cos(2\pi\,\mathbf{n}^\top\bq/\lambda)$ with crest normal $\mathbf{n}$ and a window spanning several wavelengths, $\JFbar = (2\pi a/\lambda)^2/(2\sigma_L^2)\,\mathbf{n}\mathbf{n}^\top$ is independent of $\sigma$, whereas $D(\bx,\bd) = a^2\big(1 - \cos(2\pi\,\mathbf{n}^\top\bd/\lambda)\big)$ vanishes at every $\bd = m\lambda\mathbf{n}$. If $\sigma \gg \lambda$, $\pi_\sigma$ consists of narrow peaks at $m\lambda\mathbf{n}$ weighted by the prior, so that $\Sigma_\sigma \approx \sigma^2 I$ and $\JA \approx 0$; if $\sigma \ll \lambda$, $\JA \approx \JFbar$ by Proposition~\ref{prop:fisher}. Repetitive terrain is thus treated as uninformative until the belief can resolve its period, which is the behavior required for reliable TRN.
+For a sand-wave field $h(\bq) = a\cos(2\pi\,\mathbf{n}^\top\bq/\lambda)$ with crest normal $\mathbf{n}$ and a window spanning several wavelengths, the window-averaged Fisher information $(2\pi a/\lambda)^2/(2\sigma_L^2)\,\mathbf{n}\mathbf{n}^\top$ is independent of $\sigma$, whereas $D(\bx,\bd) = a^2\big(1 - \cos(2\pi\,\mathbf{n}^\top\bd/\lambda)\big)$ vanishes at every $\bd = m\lambda\mathbf{n}$. If $\sigma \gg \lambda$, $\pi_\sigma$ consists of narrow peaks at $m\lambda\mathbf{n}$ weighted by the prior, so that $\Sigma_\sigma \approx \sigma^2 I$ and $\JA \approx 0$; if $\sigma \ll \lambda$, $\JA$ approaches the Fisher information by Proposition~\ref{prop:fisher}. Repetitive terrain is thus treated as uninformative until the belief can resolve its period, which is the behavior required for reliable TRN.
 \end{remark}
 
-\subsection{Multi-Scale Precomputation}
-Because~\eqref{eq:D}--\eqref{eq:Jac} depend only on the map and $\sigma$, $\JA$ is precomputed offline on map nodes $\bx$ and belief levels $\mathcal{S} = \{\sigma_1 > \cdots > \sigma_L\}$. For each offset $\bd$ on a square grid with spacing $\Delta_d = \max(\Delta_h, \sigma/5)$ within $\|\bd\| \le 3\sigma$, where $\Delta_h$ is the map resolution, the map $(h(\cdot + \bd) - h(\cdot))^2$ is box-filtered over the window, which yields $D(\cdot,\bd)$ for all nodes at once. The moments~\eqref{eq:second_moment} are accumulated with a streaming log-sum-exp, and $\Delta_d^2/12$ is added to the diagonal to account for the offset-grid resolution. The cost is $O(N_d N_h)$ per level for $N_d$ offsets and $N_h$ map cells. At run time, $\JA(\bx;\sigma)$ is obtained by a nearest-node lookup and a linear interpolation in $\log\sigma$, with $\sigma$ clipped to $[\sigma_L, \sigma_1]$. In this study, $\Delta_h = 5$~m, $w = 50$~m, $M = 33$ (the pings over $50$~m at $1.5$~m/s and $1$~Hz), $\sigma_L = 0.5$~m, $\mathcal{S} = \{50, 35, 20, 10, 5\}$~m, and the nodes are spaced by $20$~m.
+\subsection{Multi-Scale Precomputation and Normalization}
+Because~\eqref{eq:D}--\eqref{eq:Jac} depend only on the map and $\sigma$, $\JA$ is precomputed offline on map nodes $\bx$ and a finite set of belief levels $\mathcal{S}$ between $\sigma_{\min}$ and $\sigma_{\max}$. For each offset $\bd$ on a square grid with spacing $\Delta_d = \max(\Delta_h, \sigma/5)$ within $\|\bd\| \le 3\sigma$, where $\Delta_h$ is the map resolution, the map $(h(\cdot + \bd) - h(\cdot))^2$ is box-filtered over the window, which yields $D(\cdot,\bd)$ for all nodes at once. The moments~\eqref{eq:second_moment} are accumulated with a streaming log-sum-exp, and $\Delta_d^2/12$ is added to the diagonal to account for the offset-grid resolution. The cost is $O(N_d N_h)$ per level for $N_d$ offsets and $N_h$ map cells. Since $\sigma_A$ and the offset-grid resolution scale $\JA$ as a whole, $\JA$ is multiplied by one factor per terrain such that its terrain mean at the smallest level $\sigma_{\min}$ equals that of the window-averaged Fisher information; this preserves the decrease of $\JA$ with $\sigma$ and gives all information maps compared in Section~\ref{sec:results} the same mean information. At run time, $\JA(\bx;\sigma)$ is obtained by a nearest-node lookup and a linear interpolation in $\log\sigma$, with $\sigma$ clipped to $[\sigma_{\min}, \sigma_{\max}]$. In this study, $\Delta_h = 5$~m, $w = 50$~m, $M = 33$ (the pings over $50$~m at $1.5$~m/s and $1$~Hz), $\sigma_A = 0.3$~m, the nodes are spaced by $20$~m, and $\mathcal{S} = \{50, 35, 20, 10, 5\}$~m, extended by $\sigma_0$ when $\sigma_0 > 50$~m.
 
 %% ---------------------------------------------------------------
 %%  SECTION V -- AC-MPPI
@@ -219,8 +229,8 @@ The proposed planner, referred to as the autocorrelation-informed MPPI (AC-MPPI)
 
 \begin{figure}
   \centering
-  % Generated by scripts/ral_figures.py fig3.
-  \includegraphics[width=\linewidth]{figs/fig3_framework.pdf}
+  % Generated by scripts/ral_figures.py fig4.
+  \includegraphics[width=\linewidth]{figs/fig4_framework.pdf}
   \vspace{-14pt}
   \caption{Overall framework. The autocorrelation information maps are precomputed offline from the bathymetric map at multiple belief levels. At each replanning instant, AC-MPPI evaluates sampled heading-rate sequences by rolling out the AUV maneuvering model and predicting the covariance at arrival with the belief-dependent information.}
   \label{fig:architecture}
@@ -249,7 +259,7 @@ where $\bs_0 = \mathbf{0}$ and $\bs_{\pm i} = \pm\sqrt{3\mu_i}\,\mathbf{e}_i$ ar
   S(U) = \tr P_T + \alpha\, T(U) + c_{\mathrm{out}}\,\mathbb{1}_{\mathrm{out}}(U),
   \label{eq:cost}
 \end{equation}
-where $T(U) = \sum_t \tau_t$ and $\mathbb{1}_{\mathrm{out}}$ penalizes rollouts that leave the map. Replacing $\JA$ in~\eqref{eq:pred_c} by~\eqref{eq:fisher} at the beam footprint yields the Fisher-based counterpart used as a baseline.
+where $T(U) = \sum_t \tau_t$ and $\mathbb{1}_{\mathrm{out}}$ penalizes rollouts that leave the map. Replacing $\JA$ in~\eqref{eq:pred_c} by another information map yields the baseline MPPI planners of Section~\ref{sec:results}.
 
 \subsection{MPPI Update}
 At each replanning instant, $K$ sequences $U^k = \mathrm{clip}(\bar{U} + \boldsymbol{\epsilon}^k)$, $\boldsymbol{\epsilon}^k \sim \mathcal{N}(\mathbf{0}, \sigma_u^2 I)$, are sampled around the nominal sequence $\bar{U}$, which is included unperturbed together with the direct-to-goal sequence $U_{\mathrm{dir}}$. With the weights
@@ -287,8 +297,9 @@ and the cheaper of $\bar{U}$ and $U_{\mathrm{dir}}$ is executed. Its first comma
 \label{sec:results}
 
 \subsection{Simulation Setup}
-\subsubsection{Vehicle, navigation, and terrains}
-The 6-DOF REMUS~100 model was simulated at $10$~Hz with a cruise speed of $1.5$~m/s and an altitude of $8$~m, where the depth set-point was raised for the shallowest map elevation within $200$~m ahead of and $100$~m around the estimate. Navigation ran at $1$~Hz with known heading and without currents (Table~\ref{tab:params}). Eight $2$~km~$\times$~$2$~km crops of the NOAA BlueTopo bathymetry\footnote{\url{https://nauticalcharts.noaa.gov/data/bluetopo.html}} covered by a single survey (source resolution $4$--$16$~m) were resampled to $5$~m (Table~\ref{tab:terrain}, Fig.~\ref{fig:terrains}). One route per terrain was defined by a fixed rule: a length of $1.4$~km ($28\sigma_0$), a heading within $\pm 10^\circ$ of the dominant feature direction obtained from the terrain structure tensor, and the straight corridor with the largest mean expected error after one pass, subject to an informative area within $300$~m. The goal lies in an informative area on five terrains and in an ambiguous area on three. The routes thus represent missions in which the direct path runs along ambiguous structure while unambiguous terrain is reachable; this selection favors information-aware methods over straight-line guidance by design. For each terrain, $30$ initial offsets $\mathbf{e}_0 \sim \mathcal{N}(\mathbf{0}, 50^2 I)$ were shared by all methods together with the noise and PF random streams, so that every comparison is paired.
+\label{sec:setup}
+\subsubsection{Vehicle, navigation, and uncertainty}
+The 6-DOF REMUS~100 model was simulated at $10$~Hz with a cruise speed of $1.5$~m/s and an altitude of $8$~m, where the depth set-point was raised for the shallowest map elevation within $200$~m ahead of and $100$~m around the estimate. Navigation ran at $1$~Hz with known heading and without currents (Table~\ref{tab:params}). Three initial uncertainties $\sigma_0 \in \{30, 50, 70\}$~m were considered; for each terrain and $\sigma_0$, $30$ initial offsets $\mathbf{e}_0 \sim \mathcal{N}(\mathbf{0}, \sigma_0^2 I)$ were shared by all methods together with the noise and PF random streams, so that every comparison is paired.
 
 \begin{table}
 \caption{Simulation and planner parameters.}
@@ -298,10 +309,11 @@ The 6-DOF REMUS~100 model was simulated at $10$~Hz with a cruise speed of $1.5$~
 \begin{tabular}{l l}
 \hline
 \textbf{Parameter} & \textbf{Value} \\ \hline
-Speed / altitude / initial uncertainty $\sigma_0$ & $1.5$~m/s / $8$~m / $50$~m \\
+Speed / altitude / $\sigma_0$ & $1.5$~m/s / $8$~m / $30$, $50$, $70$~m \\
 Altimeter rate / $\sigma_z$; DR noise $\sigma_w$ & $1$~Hz / $0.3$~m; $0.2$~m per ping \\
 PF particles / $\sigma_L$ / $\sigma_q$ & $5000$ / $0.5$~m / $0.3$~m \\
 Route length / $r_a$ / $T_{\max}$ & $1.4$~km / $10$~m / $2350$~s \\
+Information maps: $w$ / $M$ / $\sigma_A$ & $50$~m / $33$ / $0.3$~m \\
 MPPI $K$ / $\Delta t$ / $N$ / $\alpha$ & $512$ / $10$~s / $40$ / $0.03$ \\
 $\sigma_u$ / $r_{\max}$ / replanning $T_r$ & $2^\circ$/s / $5^\circ$/s / $10$~s \\
 A* grid / information weight $\lambda$ & $20$~m / $8$ \\
@@ -311,117 +323,98 @@ A* grid / information weight $\lambda$ & $20$~m / $8$ \\
 \vspace{-12pt}
 \end{table}
 
+\subsubsection{Terrains and routes}
+Ten $2$~km~$\times$~$2$~km crops of the NOAA BlueTopo bathymetry\footnote{\url{https://nauticalcharts.noaa.gov/data/bluetopo.html}} covered by full-coverage multibeam surveys were resampled to $5$~m (Fig.~\ref{fig:terrains}). One route per terrain was defined by a fixed rule: a length of $1.4$~km, a heading within $\pm 10^\circ$ of the dominant feature direction obtained from the terrain structure tensor, and the straight corridor with the largest mean expected error after one pass, subject to an informative area within $300$~m. The terrains were selected from the maps and the difficulty of straight-line guidance only, not from the results of the compared planners: S1--S6 because the route-mean expected error of the autocorrelation map exceeds that of the Fisher map by a factor of at least $1.7$, and S7--S10 because it exceeds that of the standard-deviation map by a factor of at least $2$, in both cases with a straight-line success rate of at most $70\%$ in preliminary runs. The routes thus represent missions in which the direct path runs along ambiguous structure while unambiguous terrain is reachable, which favors information-aware methods over straight-line guidance by design. S6 and S9 show survey-line striping, and S1 lies deeper than the rating of the REMUS~100; since the same map serves as the true seafloor and the navigation map, these affect realism but not the fairness of the comparison.
+
 \subsubsection{Compared methods}
-1) \emph{Straight-LOS}: line-of-sight (LOS) guidance to the goal ($80$~m lookahead, straight final approach within $150$~m, go-around after a missed arrival). 2) \emph{Fisher-A*}: A* planned once from the initial estimate on an $8$-connected $20$~m grid with the edge cost (length)$\times(1 + \lambda u)$, where $u \in [0,1]$ is the normalized expected error after one pass, $E_{\mathrm{F}} = \sqrt{\tr((\sigma_0^{-2}I + M\JFbar)^{-1})}$, followed by the same LOS guidance. 3) \emph{AC-A*}: the same with $E_{\mathrm{AC}} = \sqrt{\tr\Sigma_{\sigma_0}}$. 4) \emph{Fisher-MPPI}: AC-MPPI with $\JA$ in~\eqref{eq:pred_c} replaced by~\eqref{eq:fisher}. 5) \emph{Entropy-MPPI}: the same MPPI with $\tr P_T$ in~\eqref{eq:cost} replaced by the expected entropy of the particle belief at arrival, estimated from \tbd{$N_e$} subsampled particles and \tbd{$N_z$} simulated measurement sequences per rollout~\cite{hoffmann2010mobile, ryan2010particle}. % TODO: make this description match the implemented baseline.
-6) \emph{AC-MPPI} (proposed). Methods 2)--4) and 6) form a factorial design of two information models and two planners. All MPPI variants share $K$, $\Delta t$, $N$, $\sigma_u$, and $\alpha$, which were fixed a priori (see Section~\ref{sec:sensitivity}). The A* planners used $\lambda = 8$; with $\lambda = 2$, their pooled success rates were $90.0\%$ (Fisher-A*) and $90.8\%$ (AC-A*).
+Nine methods were compared: Straight-LOS, i.e., line-of-sight (LOS) guidance to the goal ($80$~m lookahead, straight final approach within $150$~m, go-around after a missed arrival), and the combinations of two planners with four information maps. The \emph{Fisher} map uses~\eqref{eq:fisher}. The \emph{Std} and \emph{Entropy} maps use the elevation variance $s_{\mathrm{S}}(\bx)$ in the window and the terrain entropy measure $s_{\mathrm{E}}(\bx) = \log N - H_f$, $H_f = -\sum_{ij} p_{ij}\log p_{ij}$ with $p_{ij} = d_{ij}/\sum d_{ij}$ over the depths $d_{ij}$ of the $N$ cells in the window~\cite{wang2015construction}, cast into isotropic information $J_m = c_m s_m(\bx) I$. The \emph{AC} map uses~\eqref{eq:Jac}. All maps are scaled per terrain to the same terrain-mean information as the window-averaged Fisher information, so that they differ only in how the information is distributed. The A* planners plan once from the initial estimate on an $8$-connected $20$~m grid with the edge cost (length)$\times(1 + \lambda u)$, where $u \in [0,1]$ is the normalized expected error after one pass, $E_m = \sqrt{\tr((\sigma_0^{-2}I + M J_m)^{-1})}$, and follow the plan with the same LOS guidance. The MPPI planners use~\eqref{eq:prediction} with the respective map (the Fisher-MPPI with~\eqref{eq:fisher} at the beam footprint) and share all other settings. The window and $\sigma_A$ of the AC map were selected among five variants ($w \in \{25, 50, 75\}$~m and $\sigma_A \in \{0.3, 0.5, 1.0\}$~m) on $20$ tuning offsets per terrain at $\sigma_0 = 50$~m, disjoint from the test offsets, and all other parameters were fixed a priori.
 
 \subsubsection{Metrics}
 Success, false arrival, and timeout follow Section~\ref{sec:problem}-C. The mean arrival time of successful runs, the mean path length, and the root mean square error (RMSE) of the estimated trajectory are also reported. Paired differences in success are tested with the exact McNemar test, and $95\%$ Wilson confidence intervals (CIs) are given. All simulations were executed on \tbd{[CPU, RAM]}.
 
 \subsection{Overall Performance}
-The pooled results are summarized in Table~\ref{tab:overall}. AC-MPPI succeeded in $234$ of $240$ runs ($97.5\%$), the highest rate among all methods, and its advantage over every baseline was significant in the paired McNemar tests. The failures of the baselines differ in kind. Straight-LOS and the one-shot A* planners failed almost exclusively by false arrival ($75$, $28$, and $19$ runs): the PF converged to a wrong hypothesis with a small reported covariance, and the vehicle stopped at a wrong location. Fisher-MPPI rarely arrived falsely but timed out in $28$ runs, because it kept steering toward terrain that its gradient-based prediction considered informative while the actual belief failed to contract. AC-MPPI reduced both failure types, with $6$ false arrivals and no timeouts, and attained the lowest trajectory RMSE. The improvement costs a longer mission than straight-line guidance ($1204$~s versus $946$~s, $1810$~m versus $1414$~m), whereas, compared with Fisher-MPPI, AC-MPPI traveled a shorter path in a similar time because the ambiguity-aware prediction does not reward loitering over repetitive terrain.
+The results over the ten terrains are summarized in Table~\ref{tab:overall}. AC-MPPI attained the highest success rate at every initial uncertainty ($86.7$, $87.3$, and $85.0\%$) and $86.3\%$ over all $900$ runs, and it had the fewest false arrivals and the lowest trajectory RMSE. Its advantage over every planner except Fisher-MPPI was significant ($p < 10^{-4}$). Against Fisher-MPPI, the gap grew with the initial uncertainty ($+0.4$, $+3.3$, and $+4.7$ percentage points) but was not significant at any single $\sigma_0$ ($p = 1.0$, $0.28$, and $0.10$). The baselines fail in different ways. Straight-LOS and the A* planners failed almost exclusively by false arrival, because the PF converged to a wrong hypothesis with a small reported covariance and the vehicle stopped at a wrong location. The MPPI planners also timed out, as they kept steering toward terrain that their maps considered informative while the actual belief failed to contract. The robustness of AC-MPPI comes at the cost of the longest mean path ($2258$~m versus $2147$~m for Fisher-MPPI and $1417$~m for Straight-LOS). On the five terrains on which AC-MPPI succeeded in at least $80\%$ of the runs and at least three baselines in at most $70\%$ (S1, S3, S5, S6, and S7, a selection made after the experiment), AC-MPPI attained $92.0\%$, compared with at most $83.6\%$ for the baselines.
 
 \begin{table*}
   \centering
-  \caption{Pooled Monte Carlo results over eight terrains ($240$ paired runs per method). McNemar: runs in which only AC-MPPI / only the baseline succeeded, with the exact $p$-value. Planning time: per replanning for MPPI and per plan for A*.}
+  \caption{Monte Carlo results over ten terrains ($30$ paired runs per terrain and $\sigma_0$; $900$ per method). Pooled columns are over all three $\sigma_0$. McNemar: pooled runs in which only AC-MPPI / only the baseline succeeded, with the exact $p$-value.}
   \footnotesize
-  \setlength{\tabcolsep}{4.5pt}
-  \begin{tabular}{l c c c c c c c c}
+  \setlength{\tabcolsep}{4.2pt}
+  \begin{tabular}{l c c c c c c c c c c}
     \hline
-    \textbf{Method} & \textbf{Success [\%] (95\% CI)} & \textbf{False arr.} & \textbf{Timeout} & \textbf{Time [s]} & \textbf{Path [m]} & \textbf{RMSE [m]} & \textbf{Plan. time [ms]} & \textbf{McNemar} \\
+    & \multicolumn{3}{c}{\textbf{Success [\%] by $\sigma_0$}} & & & & & & & \\
+    \textbf{Method} & \textbf{30 m} & \textbf{50 m} & \textbf{70 m} & \textbf{Pooled [\%] (95\% CI)} & \textbf{False arr.} & \textbf{Timeout} & \textbf{Time [s]} & \textbf{Path [m]} & \textbf{RMSE [m]} & \textbf{McNemar} \\
     \hline
-    Straight-LOS   & $68.8$ ($62.6$--$74.3$) & $75$ & $0$  & $946$  & $1414$ & $32.1$ & -- & $72/3$, $p < 10^{-4}$ \\
-    Fisher-A*      & $88.3$ ($83.7$--$91.8$) & $28$ & $0$  & $1175$ & $1752$ & $24.2$ & \tbd{XX} & $27/5$, $p = 1.1\times10^{-4}$ \\
-    AC-A*          & $92.1$ ($88.0$--$94.9$) & $19$ & $0$  & $1113$ & $1657$ & $24.0$ & \tbd{XX} & $17/4$, $p = 7.2\times10^{-3}$ \\
-    Fisher-MPPI    & $87.1$ ($82.2$--$90.7$) & $3$  & $28$ & $1169$ & $1955$ & $25.8$ & \tbd{XX} & $30/5$, $p = 2.2\times10^{-5}$ \\
-    Entropy-MPPI   & \tbd{XX} (\tbd{XX}--\tbd{XX}) & \tbd{XX} & \tbd{XX} & \tbd{XX} & \tbd{XX} & \tbd{XX} & \tbd{XX} & \tbd{XX/XX}, \tbd{$p = $ XX} \\
-    \textbf{AC-MPPI (proposed)} & $\mathbf{97.5}$ ($94.7$--$98.8$) & $6$ & $\mathbf{0}$ & $1204$ & $1810$ & $\mathbf{23.8}$ & \tbd{XX} & -- \\
+    Straight-LOS  & $60.3$ & $54.7$ & $50.7$ & $55.2$ ($52.0$--$58.4$) & $403$ & $0$   & $951$  & $1417$ & $35.4$ & $346/66$, $p < 10^{-4}$ \\
+    Fisher-A*     & $78.3$ & $77.7$ & $75.0$ & $77.0$ ($74.1$--$79.6$) & $207$ & $0$   & $1118$ & $1656$ & $28.8$ & $162/78$, $p < 10^{-4}$ \\
+    Std-A*        & $78.3$ & $80.0$ & $79.0$ & $79.1$ ($76.3$--$81.6$) & $188$ & $0$   & $1149$ & $1702$ & $27.8$ & $143/78$, $p < 10^{-4}$ \\
+    Entropy-A*    & $79.7$ & $80.7$ & $78.3$ & $79.6$ ($76.8$--$82.1$) & $184$ & $0$   & $1172$ & $1727$ & $27.7$ & $141/80$, $p < 10^{-4}$ \\
+    AC-A*         & $84.7$ & $78.0$ & $71.3$ & $78.0$ ($75.2$--$80.6$) & $198$ & $0$   & $1099$ & $1620$ & $28.6$ & $153/78$, $p < 10^{-4}$ \\
+    Fisher-MPPI   & $86.3$ & $84.0$ & $80.3$ & $83.6$ ($81.0$--$85.8$) & $50$  & $98$  & $1331$ & $2147$ & $27.4$ & $105/80$, $p = 0.077$ \\
+    Std-MPPI      & $82.0$ & $71.7$ & $72.0$ & $75.2$ ($72.3$--$77.9$) & $124$ & $99$  & $1421$ & $2218$ & $27.3$ & $178/78$, $p < 10^{-4}$ \\
+    Entropy-MPPI  & $79.0$ & $73.3$ & $73.0$ & $75.1$ ($72.2$--$77.8$) & $112$ & $112$ & $1381$ & $2202$ & $27.2$ & $175/74$, $p < 10^{-4}$ \\
+    \textbf{AC-MPPI (proposed)} & $\mathbf{86.7}$ & $\mathbf{87.3}$ & $\mathbf{85.0}$ & $\mathbf{86.3}$ ($83.9$--$88.4$) & $\mathbf{34}$ & $89$ & $1423$ & $2258$ & $\mathbf{24.7}$ & -- \\
     \hline
   \end{tabular}
   \label{tab:overall}
-  \vspace{-12pt}
+  \vspace{-10pt}
 \end{table*}
 
 \subsection{Per-Terrain Analysis}
-Table~\ref{tab:terrain} shows where the improvement originates. On S3, S6, and S7, where unambiguous terrain lies near the route or around the goal, the four A*- and MPPI-based planners succeeded in every run. On S1 and S2, whose elongated features leave only the along-feature offset ambiguous, any path that crosses the stripes or the band resolves the ambiguity; these planners succeeded in at least $29$ of $30$ runs, whereas Straight-LOS, traveling along the features, arrived falsely in $17$ and $5$ runs. The differences concentrate on the sand-wave fields S4, S5, and S8, where the gradient is large but periodic: Fisher-MPPI succeeded in $20$, $12$, and $27$ runs with $28$ timeouts, the one-shot A* planners in $17$--$29$ runs with $47$ false arrivals in total, and AC-MPPI in $28$, $28$, and $29$ runs.
+Table~\ref{tab:terrain} shows that no baseline is reliable across both kinds of terrain. Fisher-MPPI collapsed on the sand waves of S3 ($45$ of $90$ runs, with $44$ timeouts), where the Fisher map overrates the sand waves (Fig.~\ref{fig:maps}). The Std- and Entropy-MPPI planners collapsed on the stripes of S1 ($56$ runs each, with $34$ false arrivals), the sand waves of S5 ($40$ and $44$ runs, with $31$ and $37$ timeouts), and the slope of S7 ($45$ and $47$ runs), where their maps rate the whole terrain as informative; the Std- and Entropy-A* planners failed on S7 as well ($42$ runs each). AC-A* fell to $43$ runs on S6 and S9, mostly by false arrival, and its success decreased with $\sigma_0$ from $84.7\%$ to $71.3\%$, as a plan computed once from the initial estimate cannot react to a larger start offset. AC-MPPI was within seven runs of the best method on nine of the ten terrains, whereas every baseline fell more than ten runs behind the best on at least three terrains. The exception is S2, where AC-MPPI timed out in $44$ of $90$ runs and was the weakest planner; in a preliminary experiment with $\sigma_A = 0.5$~m and without the normalization, the same planner succeeded in $28$ of $30$ runs on S2 at $\sigma_0 = 50$~m, which suggests that the information scale, set by $\sigma_A$ and one normalization factor per terrain, does not suit every terrain.
 
-The factorial design separates the two components. Replacing the Fisher information by the proposed information raised the success rate from $88.3\%$ to $92.1\%$ with A* and from $87.1\%$ to $97.5\%$ with MPPI, whereas replacing A* by MPPI changed it from $88.3\%$ to $87.1\%$ with the Fisher information but from $92.1\%$ to $97.5\%$ with the proposed information. Closed-loop planning therefore pays off only in combination with the ambiguity-aware information. With the Fisher information, replanning from the current belief repeatedly predicts that crossing the sand waves will shrink the covariance, so the vehicle keeps returning to the sand-wave field while the actual belief remains multimodal. With the proposed information, the same field carries little information at a large belief size (Remark~\ref{rem:periodic}), so the planner does not count on it until the predicted belief has contracted and instead favors paths whose information is unambiguous at the current belief size. The one-shot A* planners cannot react to the realized belief: a vehicle that misses the planned informative area because of its start offset continues along the plan and arrives falsely.
+The comparison of planners for each map separates the two components of the framework. With the one-shot A* planner, the four maps performed within $2.6$ percentage points of each other ($77.0$--$79.6\%$), so the choice of map matters little when the plan cannot react to the realized belief. With closed-loop MPPI, the directional maps improved ($77.0 \rightarrow 83.6\%$ with Fisher and $78.0 \rightarrow 86.3\%$ with AC), whereas the magnitude-based maps degraded ($79.1 \rightarrow 75.2\%$ with Std and $79.6 \rightarrow 75.1\%$ with Entropy). Closed-loop planning therefore amplifies the quality of the information map: replanning from the current belief repeatedly steers the vehicle toward whatever the map rates as informative, which pays off only if the map discounts ambiguous terrain. With the proposed information, ambiguous terrain carries little information at a large belief size (Remark~\ref{rem:periodic}), so the planner does not count on it until the predicted belief has contracted and instead favors paths whose information is unambiguous at the current belief size.
 
-\begin{table}
+\begin{table*}
   \centering
-  \caption{Successful runs out of $30$ per terrain. Parentheses: false arrivals / timeouts (omitted when zero).}
+  \caption{Successful runs out of $90$ per terrain ($\sigma_0 = 30$, $50$, $70$~m pooled). Bold: best method on the terrain.}
   \footnotesize
-  \setlength{\tabcolsep}{2.2pt}
-  \resizebox{\linewidth}{!}{%
-  \begin{tabular}{l c c c c c c}
+  \setlength{\tabcolsep}{4.0pt}
+  \begin{tabular}{l l c c c c c c c c c c}
     \hline
-    \textbf{Terrain} & \textbf{\makecell{Straight\\-LOS}} & \textbf{\makecell{Fisher\\-A*}} & \textbf{\makecell{AC\\-A*}} & \textbf{\makecell{Fisher\\-MPPI}} & \textbf{\makecell{Entropy\\-MPPI}} & \textbf{\makecell{AC-MPPI\\(prop.)}} \\
+    \textbf{Terrain} & \textbf{Feature} & \textbf{Depth [m]} & \textbf{Straight} & \textbf{Fisher-A*} & \textbf{Std-A*} & \textbf{Entropy-A*} & \textbf{AC-A*} & \textbf{Fisher-MPPI} & \textbf{Std-MPPI} & \textbf{Entropy-MPPI} & \textbf{AC-MPPI} \\
     \hline
-    S1 Marquesas, FL (stripes)   & $13$ ($17/0$) & $30$ & $30$ & $30$ & \tbd{XX} & $29$ ($1/0$) \\
-    S2 Long Isl.\ Sd., NY (slope band) & $25$ ($5/0$) & $30$ & $30$ & $30$ & \tbd{XX} & $30$ \\
-    S3 Flower Garden, GoM (domes) & $30$ & $30$ & $30$ & $30$ & \tbd{XX} & $30$ \\
-    S4 Golden Gate, CA (sand waves) & $20$ ($10/0$) & $17$ ($13/0$) & $25$ ($5/0$) & $20$ ($0/10$) & \tbd{XX} & $\mathbf{28}$ ($2/0$) \\
-    S5 Point Reyes B, CA (sand waves) & $17$ ($13/0$) & $20$ ($10/0$) & $17$ ($13/0$) & $12$ ($0/18$) & \tbd{XX} & $\mathbf{28}$ ($2/0$) \\
-    S6 Point Reyes A, CA (sand waves) & $20$ ($10/0$) & $30$ & $30$ & $30$ & \tbd{XX} & $30$ \\
-    S7 Gray's Reef, GA (hard bottom) & $29$ ($1/0$) & $30$ & $30$ & $30$ & \tbd{XX} & $30$ \\
-    S8 SF Bar, CA (sand waves) & $11$ ($19/0$) & $25$ ($5/0$) & $29$ ($1/0$) & $27$ ($3/0$) & \tbd{XX} & $29$ ($1/0$) \\
+    S1 Marquesas, FL       & stripes    & $89$--$159$ & $37$ & $89$ & $83$ & $82$ & $\mathbf{90}$ & $88$ & $56$ & $56$ & $88$ \\
+    S2 Golden Gate, CA     & sand waves & $12$--$18$  & $62$ & $54$ & $70$ & $\mathbf{73}$ & $58$ & $52$ & $53$ & $50$ & $43$ \\
+    S3 Point Reyes B, CA   & sand waves & $51$--$68$  & $52$ & $53$ & $81$ & $82$ & $68$ & $45$ & $78$ & $82$ & $\mathbf{83}$ \\
+    S4 Point Reyes A, CA   & sand waves & $46$--$62$  & $59$ & $\mathbf{90}$ & $\mathbf{90}$ & $\mathbf{90}$ & $\mathbf{90}$ & $88$ & $\mathbf{90}$ & $88$ & $85$ \\
+    S5 SF Bar A, CA        & sand waves & $10$--$17$  & $31$ & $78$ & $70$ & $69$ & $\mathbf{88}$ & $83$ & $40$ & $44$ & $86$ \\
+    S6 Gray's Reef, GA     & low relief & $22$--$24$  & $27$ & $54$ & $55$ & $55$ & $43$ & $70$ & $79$ & $\mathbf{81}$ & $74$ \\
+    S7 Point Reyes C, CA   & slope      & $15$--$51$  & $45$ & $67$ & $42$ & $42$ & $87$ & $\mathbf{89}$ & $45$ & $47$ & $83$ \\
+    S8 SF Bar B, CA        & rough bed  & $10$--$13$  & $65$ & $80$ & $80$ & $80$ & $74$ & $82$ & $\mathbf{85}$ & $84$ & $83$ \\
+    S9 Long Isl.\ Sound, NY & ridges    & $22$--$26$  & $49$ & $49$ & $55$ & $55$ & $43$ & $\mathbf{68}$ & $66$ & $57$ & $66$ \\
+    S10 Marquesas B, FL    & channels   & $18$--$21$  & $70$ & $79$ & $86$ & $\mathbf{88}$ & $61$ & $87$ & $85$ & $87$ & $86$ \\
     \hline
-    Total ($240$) & $165$ & $212$ & $221$ & $209$ & \tbd{XX} & $\mathbf{234}$ \\
+    \multicolumn{3}{l}{Total ($900$)} & $497$ & $693$ & $712$ & $716$ & $702$ & $752$ & $677$ & $676$ & $\mathbf{777}$ \\
     \hline
-  \end{tabular}}
+  \end{tabular}
   \label{tab:terrain}
-  \vspace{-12pt}
-\end{table}
+  \vspace{-10pt}
+\end{table*}
 
-\subsection{Illustrative Run}
-Fig.~\ref{fig:run} contrasts the failure modes on S5 for one shared initial offset. Straight-LOS and AC-A* traveled along the sand waves and arrived falsely with errors of $52$~m and $28$~m. Fisher-A* reached the goal after a $2192$~m detour in $1464$~s. Fisher-MPPI loitered over the sand-wave field around the goal, where its prediction kept promising a covariance reduction, and timed out after $3511$~m while its filter uncertainty $\sqrt{\tr P}$ remained above $10$~m. AC-MPPI deviated from the direct route early, its $\sqrt{\tr P}$ fell below $10$~m at $588$~s, and it arrived in $1129$~s with an error of $5$~m over $1690$~m.
+\subsection{Representative Run}
+Fig.~\ref{fig:run} shows a representative run on S3 at $\sigma_0 = 50$~m. Straight-LOS traveled along the sand waves and arrived falsely with an error of $18.1$~m. Fisher-MPPI loitered over the sand-wave field around the goal, where its prediction kept promising a covariance reduction, and timed out after $3513$~m with $\sqrt{\tr P}$ above $13$~m. Entropy-MPPI headed for the northern escarpment that its map rates as informative; its filter uncertainty fell below $10$~m, but it arrived with an error of $10.4$~m, just outside the arrival radius. AC-A* reached the goal with an error of $9.5$~m. AC-MPPI deviated from the direct route early, its $\sqrt{\tr P}$ fell below $10$~m at $638$~s, and it arrived in $1198$~s with an error of $5.3$~m.
 
 \begin{figure}
   \centering
-  % Generated by scripts/ral_figures.py fig4.
-  \includegraphics[width=\linewidth]{figs/fig4_run.pdf}
+  % Generated by scripts/ral_figures.py fig5 (representative run of the result bundle, S3, sigma0 = 50 m).
+  \includegraphics[width=\linewidth]{figs/fig5_run.pdf}
   \vspace{-14pt}
-  \caption{Illustrative run on S5 with the same initial offset for all methods, selected to contrast the failure modes. Left: true tracks (circle: success; cross: false arrival or timeout). Right: estimation error and filter uncertainty $\sqrt{\tr P}$ over time (dotted: $10$~m).}
+  \caption{Representative run on S3 at $\sigma_0 = 50$~m with the same initial offset for all methods (five of the nine methods shown). Left: true tracks (circle: success; cross: false arrival or timeout). Right: estimation error and filter uncertainty $\sqrt{\tr P}$ over time (dotted: $10$~m).}
   \label{fig:run}
   \vspace{-12pt}
 \end{figure}
 
-\subsection{Parameter Sensitivity}
-\label{sec:sensitivity}
-The sensitivity to the time weight $\alpha$ and the horizon $N\Delta t$ was evaluated on S1--S4 with $20$ additional initial offsets per terrain disjoint from the test offsets ($80$ runs per setting, Table~\ref{tab:sensitivity}). AC-MPPI attained $95.0$--$100\%$ over the entire grid, whereas Fisher-MPPI ranged from $83.8\%$ to $98.8\%$ and approached the proposed method only with the largest time weight $\alpha = 0.05$. A larger $\alpha$ suppresses the detours that the overconfident Fisher prediction otherwise sustains, which is consistent with its timeout failures. The proposed information model thus removes the need to tune the time weight against the terrain ambiguity.
-% TODO (before submission): run Fisher-MPPI with alpha = 0.05 / horizon 400 s on all eight terrains with the test offsets
-%       and report it, since a reviewer will ask whether a tuned Fisher-MPPI closes the gap on S5 and S8.
-
-\begin{table}
-  \centering
-  \caption{Success rate [\%] of the MPPI planners on S1--S4 for different $\alpha$ and horizons ($80$ runs each, offsets disjoint from the test set).}
-  \footnotesize
-  \setlength{\tabcolsep}{5pt}
-  \begin{tabular}{c c c c c}
-    \hline
-    & \multicolumn{2}{c}{\textbf{Fisher-MPPI}} & \multicolumn{2}{c}{\textbf{AC-MPPI}} \\
-    $\alpha$ & $400$~s & $600$~s & $400$~s & $600$~s \\
-    \hline
-    $0.01$ & $85.0$ & $83.8$ & $98.8$ & $95.0$ \\
-    $0.02$ & $85.0$ & $88.8$ & $100.0$ & $97.5$ \\
-    $0.03$ & $86.2$ & $90.0$ & $98.8$ & $100.0$ \\
-    $0.05$ & $98.8$ & $91.2$ & $100.0$ & $97.5$ \\
-    \hline
-  \end{tabular}
-  \label{tab:sensitivity}
-  \vspace{-12pt}
-\end{table}
-
-\subsection{Particle-Entropy Planning and Computation Time}
-% TODO: rewrite according to the actual Entropy-MPPI and timing results.
-Entropy-MPPI evaluates the multimodal particle belief directly and does not rely on the Gaussian approximation in~\eqref{eq:prediction}. It achieved \tbd{XX}\% success with \tbd{XX} false arrivals and \tbd{XX} timeouts while requiring \tbd{XX}~ms per replanning, \tbd{XX} times that of AC-MPPI. \tbd{[Interpret whether the subsampled particles and simulated measurement sequences represented the ambiguity on S4, S5, and S8 within the real-time budget.]} AC-MPPI instead moves the evaluation of the ambiguity offline: precomputing $\JA$ at the five belief levels took \tbd{XX}~s per map, and AC-MPPI required \tbd{XX}~ms per replanning (\tbd{XX}~ms at most), comparable to Fisher-MPPI (\tbd{XX}~ms) because both evaluate a covariance recursion along each rollout and differ only in the information lookup, and well within the replanning period of $10$~s.
+\subsection{Computation Time}
+% TODO: fill in after the timing runs.
+Precomputing $\JA$ at all belief levels took \tbd{XX}~s per $2$~km~$\times$~$2$~km map, which is performed once before the mission. AC-MPPI required \tbd{XX}~ms per replanning on average (\tbd{XX}~ms at most), comparable to the \tbd{XX}~ms of Fisher-MPPI because all MPPI variants evaluate the same covariance recursion along each rollout and differ only in the information lookup, and well within the replanning period of $10$~s.
 
 %% ---------------------------------------------------------------
 %%  SECTION VII -- CONCLUSION
 %% ---------------------------------------------------------------
 \section{Conclusion}
 \label{sec:conclusion}
-This paper presented an ambiguity-aware active localization framework for TRN of AUVs that integrates an autocorrelation-based terrain information model into MPPI control. The information model retains only the information that remains unambiguous at the current belief size, reduces to the Fisher information for small uncertainty, and is precomputed at multiple belief scales for real-time covariance prediction along rollouts of an AUV maneuvering model. Monte Carlo simulations with a 6-DOF REMUS~100 model on eight real bathymetric maps showed that AC-MPPI achieved a $97.5\%$ success rate, reducing both the false arrivals of straight-line and one-shot A* guidance and the timeouts of Fisher-based MPPI, and that, unlike the Fisher-based planner, its performance was insensitive to the time weight and the horizon on the terrains examined. The factorial comparison further showed that closed-loop planning pays off only when combined with the ambiguity-aware information. This study assumed a known heading, no currents, and an error-free map, approximated the belief size isotropically, and was conducted in simulation. Future work will address anisotropic beliefs and map uncertainty and validate the framework in field experiments.
+This paper presented an ambiguity-aware active localization framework for TRN of AUVs that integrates an autocorrelation-based terrain information model into MPPI control. The information model retains only the information that remains unambiguous at the current belief size, reduces to the Fisher information for small uncertainty, and is precomputed at multiple belief scales for real-time covariance prediction along rollouts of an AUV maneuvering model. In 8,100 Monte Carlo runs with a 6-DOF REMUS~100 model on ten real bathymetric maps and three initial uncertainties, AC-MPPI attained the highest success rate at every uncertainty level and the fewest false arrivals, and it was the only planner that remained within seven runs (out of $90$) of the best method on nine of the ten terrains, covering both terrains that mislead the Fisher information and terrains that mislead the standard-deviation and entropy measures. The comparison of planners further showed that closed-loop planning amplifies the quality of the information map, improving the directional maps and degrading the magnitude-based ones. The advantage over Fisher-based MPPI grew with the initial uncertainty but was not statistically significant over the ten terrains, and on one sand-wave field AC-MPPI timed out frequently, which calls for an information scale that adapts to the terrain. This study also assumed a known heading, no currents, and an error-free map, approximated the belief size isotropically, and was conducted in simulation. Future work will address these points and validate the framework in field experiments.
 
 \balance
 \bibliographystyle{IEEEtran}
